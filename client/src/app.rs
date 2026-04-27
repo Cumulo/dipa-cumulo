@@ -10,7 +10,7 @@ use respo::ui::{ui_button, ui_center, ui_global, ui_input};
 use respo::{button, div, input, span, DispatchFn, RespoApp, RespoElement, RespoEvent, RespoNode, RespoStore};
 use respo_state_derive::RespoState;
 use serde::{Deserialize, Serialize};
-use shared::{ClientStore, GlobalStats, Op};
+use shared::{ChatPost, ClientStore, GlobalStats, OnlineUser, Op, PublicData};
 
 use crate::store::{ActionOp, Store};
 
@@ -45,29 +45,54 @@ impl RespoApp for App {
         let states = &store.states;
         let fs = &store.full_store;
         let cs = &fs.base;
+        let public_data = &fs.public_data;
 
         if !cs.logged_in {
-            return comp_login(&states.pick("login"), store.ws.as_ref());
+            let login_node = comp_login(&states.pick("login"), store.ws.as_ref())?;
+            let messages = fs.base.messages.as_slice();
+            if messages.is_empty() {
+                return Ok(login_node);
+            }
+            return Ok(div()
+                .children(vec![
+                    login_node,
+                    comp_messages(messages, store.ws.as_ref())?.to_node(),
+                ])
+                .to_node());
         }
 
         let user_data = fs.user_data.as_ref();
-        let messages = user_data.map(|u| u.messages.as_slice()).unwrap_or(&[]);
+        let messages = fs.base.messages.as_slice();
         let todos = user_data.map(|u| u.todos.as_slice()).unwrap_or(&[]);
+        let current_user = user_data.and_then(|u| u.user.as_ref());
 
         let page: RespoNode<ActionOp> = match cs.router.name.as_str() {
+            "board" => comp_board(
+                &public_data.chat_posts,
+                current_user,
+                &states.pick("board"),
+                store.ws.as_ref(),
+            )?
+            .to_node(),
             "todos" => comp_todo_list(todos, &states.pick("todos"), store.ws.as_ref())?.to_node(),
             "profile" => comp_profile(
-                user_data.and_then(|u| u.user.as_ref()),
+                current_user,
                 &states.pick("profile"),
                 store.ws.as_ref(),
-            )?.to_node(),
+            )?
+            .to_node(),
+            r if r.starts_with("user:") => {
+                let uid = &r["user:".len()..];
+                let viewed = public_data.online_users.iter().find(|u| u.id == uid);
+                comp_user_profile_view(viewed)?.to_node()
+            }
             _ => comp_home(&cs.global)?.to_node(),
         };
 
         Ok(div()
             .class(ui_global())
             .children(vec![
-                comp_navigation(cs, store.ws.as_ref())?.to_node(),
+                comp_navigation(cs, public_data, store.ws.as_ref())?.to_node(),
                 page,
                 comp_messages(messages, store.ws.as_ref())?.to_node(),
             ])
@@ -111,9 +136,63 @@ fn nav_tab(
         .to_node()
 }
 
-fn comp_navigation(cs: &ClientStore, ws: Option<&web_sys::WebSocket>) -> Result<RespoElement<ActionOp>, String> {
+fn comp_navigation(
+    cs: &ClientStore,
+    public_data: &PublicData,
+    ws: Option<&web_sys::WebSocket>,
+) -> Result<RespoElement<ActionOp>, String> {
     let route = cs.router.name.as_str();
     let g = &cs.global;
+
+    // Online user badges — clickable, navigate to their read-only profile
+    let mut right_children: Vec<RespoNode<ActionOp>> = vec![
+        stat_badge(g.online_count, "online"),
+        sep_dot(),
+        stat_badge(g.total_users, "users"),
+        sep_dot(),
+        stat_badge(g.total_todos, "todos"),
+    ];
+
+    if !public_data.online_users.is_empty() {
+        right_children.push(
+            span()
+                .style(respo_style().padding4(0, 10, 0, 10).color(CssColor::Hsl(0, 0, 78)))
+                .inner_text("|")
+                .to_node(),
+        );
+        for user in &public_data.online_users {
+            let uid = user.id.clone();
+            let route_target = format!("user:{}", uid);
+            let is_active = route == route_target.as_str();
+            right_children.push(
+                button()
+                    .style(
+                        respo_style()
+                            .padding4(3, 9, 3, 9)
+                            .border_radius(12.0)
+                            .font_size(12.0)
+                            .cursor("pointer")
+                            .margin4(0, 4, 0, 0)
+                            .background_color(if is_active {
+                                CssColor::Hsl(220, 70, 50)
+                            } else {
+                                CssColor::Hsl(220, 40, 92)
+                            })
+                            .color(if is_active {
+                                CssColor::White
+                            } else {
+                                CssColor::Hsl(220, 50, 35)
+                            }),
+                    )
+                    .inner_text(user.name.clone())
+                    .on_click(move |_e: RespoEvent, dispatch: DispatchFn<_>| {
+                        dispatch.run(crate::store::ActionOp::RouteChange(route_target.clone()))?;
+                        Ok(())
+                    })
+                    .to_node(),
+            );
+        }
+    }
 
     Ok(div()
         .style(
@@ -136,11 +215,12 @@ fn comp_navigation(cs: &ClientStore, ws: Option<&web_sys::WebSocket>) -> Result<
                         .inner_text("Calcium")
                         .to_node(),
                     nav_tab("Home",    "home",    route == "home" || route.is_empty(), ws.cloned()),
+                    nav_tab("Board",   "board",   route == "board",   ws.cloned()),
                     nav_tab("Todos",   "todos",   route == "todos",   ws.cloned()),
                     nav_tab("Profile", "profile", route == "profile", ws.cloned()),
                 ])
                 .to_node(),
-            // Right: global stats badge
+            // Right: stats + online user badges
             div()
                 .style(
                     respo_style()
@@ -149,13 +229,7 @@ fn comp_navigation(cs: &ClientStore, ws: Option<&web_sys::WebSocket>) -> Result<
                         .font_size(13.0)
                         .color(CssColor::Hsl(0, 0, 45)),
                 )
-                .children(vec![
-                    stat_badge(g.online_count, "online"),
-                    sep_dot(),
-                    stat_badge(g.total_users, "users"),
-                    sep_dot(),
-                    stat_badge(g.total_todos, "todos"),
-                ])
+                .children(right_children)
                 .to_node(),
         ]))
 }
@@ -246,6 +320,213 @@ fn concept_card(title: &str, _bg: &str, body: &str) -> RespoNode<ActionOp> {
                 .to_node(),
         ])
         .to_node()
+}
+
+// ---------------------------------------------------------------------------
+// Public board — shared chat visible to all logged-in users
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, RespoState)]
+struct BoardState {
+    text: String,
+}
+
+fn comp_board(
+    posts: &[ChatPost],
+    current_user: Option<&shared::UserView>,
+    states: &RespoStatesTree,
+    ws: Option<&web_sys::WebSocket>,
+) -> Result<RespoElement<ActionOp>, String> {
+    let state: Rc<BoardState> = states.cast_branch::<BoardState>();
+    let cursor = states.path();
+
+    let post_rows: Vec<RespoNode<ActionOp>> = posts
+        .iter()
+        .map(|post| {
+            div()
+                .style(
+                    respo_style()
+                        .padding4(10, 14, 10, 14)
+                        .border_radius(6.0)
+                        .background_color(CssColor::White)
+                        .border(Some((1.0, CssBorderStyle::Solid, CssColor::Hsl(0, 0, 92))))
+                        .margin4(0, 0, 8, 0)
+                        .display(CssDisplay::Flex)
+                        .align_items(CssFlexAlignItems::Baseline),
+                )
+                .children(vec![
+                    span()
+                        .style(
+                            respo_style()
+                                .font_weight(CssFontWeight::Weight(700))
+                                .color(CssColor::Hsl(220, 60, 40))
+                                .font_size(14.0)
+                                .padding4(0, 10, 0, 0),
+                        )
+                        .inner_text(post.author_name.clone())
+                        .to_node(),
+                    span()
+                        .style(respo_style().font_size(15.0).color(CssColor::Hsl(0, 0, 15)))
+                        .inner_text(post.text.clone())
+                        .to_node(),
+                ])
+                .to_node()
+        })
+        .collect();
+
+    let cursor_input = cursor.clone();
+    let cursor_submit = cursor.clone();
+    let state_input = state.clone();
+    let state_submit = state.clone();
+    let ws_submit = ws.cloned();
+
+    let mut children: Vec<RespoNode<ActionOp>> = vec![
+        div()
+            .style(
+                respo_style()
+                    .font_size(20.0)
+                    .font_weight(CssFontWeight::Weight(700))
+                    .padding4(0, 0, 16, 0),
+            )
+            .children(vec![span().inner_text("Public Board").to_node()])
+            .to_node(),
+        div()
+            .style(respo_style().display(CssDisplay::Flex).padding4(0, 0, 16, 0))
+            .children(vec![
+                input()
+                    .class(ui_input())
+                    .attrs(&[
+                        ("placeholder", "Say something to everyone\u{2026}"),
+                        ("value", state.text.as_str()),
+                    ])
+                    .on_input(move |e: RespoEvent, dispatch: DispatchFn<_>| {
+                        if let RespoEvent::Input { value, .. } = e {
+                            let mut s: BoardState = (*state_input).clone();
+                            s.text = value;
+                            dispatch.run_state(&cursor_input, s)?;
+                        }
+                        Ok(())
+                    })
+                    .to_node(),
+                button()
+                    .class(ui_button())
+                    .inner_text("Post")
+                    .on_click(move |_e: RespoEvent, dispatch: DispatchFn<_>| {
+                        let text = state_submit.text.trim().to_string();
+                        if !text.is_empty() {
+                            if let Some(ws) = &ws_submit {
+                                crate::dispatch_op(
+                                    &Store { ws: Some(ws.clone()), ..Default::default() },
+                                    Op::PostChat { text },
+                                );
+                            }
+                            dispatch.run_state(&cursor_submit, BoardState::default())?;
+                        }
+                        Ok(())
+                    })
+                    .to_node(),
+            ])
+            .to_node(),
+    ];
+
+    if post_rows.is_empty() {
+        children.push(
+            div()
+                .style(
+                    respo_style()
+                        .font_size(14.0)
+                        .color(CssColor::Hsl(0, 0, 60))
+                        .padding4(16, 0, 16, 0),
+                )
+                .children(vec![span().inner_text("No posts yet. Be the first to say hi!").to_node()])
+                .to_node(),
+        );
+    } else {
+        children.extend(post_rows);
+    }
+
+    let _ = current_user;
+    Ok(div()
+        .style(
+            respo_style()
+                .padding(24)
+                .display(CssDisplay::Flex)
+                .flex_direction(CssFlexDirection::Column),
+        )
+        .children(children))
+}
+
+// ---------------------------------------------------------------------------
+// Read-only user profile — view another user's public info
+// ---------------------------------------------------------------------------
+
+fn comp_user_profile_view(user: Option<&OnlineUser>) -> Result<RespoElement<ActionOp>, String> {
+    let back_btn = button()
+        .class(ui_button())
+        .style(respo_style().margin4(24, 0, 0, 0))
+        .inner_text("\u{2190} Back")
+        .on_click(move |_e: RespoEvent, dispatch: DispatchFn<_>| {
+            dispatch.run(crate::store::ActionOp::RouteChange("home".to_string()))?;
+            Ok(())
+        })
+        .to_node();
+
+    match user {
+        None => Ok(div()
+            .style(
+                respo_style()
+                    .padding(24)
+                    .display(CssDisplay::Flex)
+                    .flex_direction(CssFlexDirection::Column),
+            )
+            .children(vec![
+                div()
+                    .style(respo_style().font_size(16.0).color(CssColor::Hsl(0, 0, 50)).padding4(0, 0, 16, 0))
+                    .children(vec![span().inner_text("User not found or went offline.").to_node()])
+                    .to_node(),
+                back_btn,
+            ])),
+        Some(u) => {
+            let bio_text =
+                if u.bio.is_empty() { "(no bio yet)".to_string() } else { u.bio.clone() };
+            Ok(div()
+                .style(
+                    respo_style()
+                        .padding(24)
+                        .display(CssDisplay::Flex)
+                        .flex_direction(CssFlexDirection::Column),
+                )
+                .children(vec![
+                    div()
+                        .style(
+                            respo_style()
+                                .font_size(26.0)
+                                .font_weight(CssFontWeight::Weight(300))
+                                .padding4(0, 0, 4, 0),
+                        )
+                        .children(vec![span().inner_text(u.name.clone()).to_node()])
+                        .to_node(),
+                    div()
+                        .style(
+                            respo_style()
+                                .font_size(12.0)
+                                .color(CssColor::Hsl(140, 50, 38))
+                                .padding4(0, 0, 24, 0),
+                        )
+                        .children(vec![span().inner_text("\u{25cf} Online now").to_node()])
+                        .to_node(),
+                    div()
+                        .style(respo_style().font_weight(CssFontWeight::Weight(700)).padding4(0, 0, 8, 0))
+                        .children(vec![span().inner_text("Bio").to_node()])
+                        .to_node(),
+                    div()
+                        .style(respo_style().font_size(15.0).color(CssColor::Hsl(0, 0, 30)))
+                        .children(vec![span().inner_text(bio_text).to_node()])
+                        .to_node(),
+                    back_btn,
+                ]))
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

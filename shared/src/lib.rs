@@ -55,14 +55,17 @@ pub struct TodoItem {
 }
 
 /// Base session/global data sent to every client.
-/// Exactly 4 fields — within dipa's default batch size.
+/// 5 fields — needs max_fields_per_batch = 5.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DiffPatch)]
+#[dipa(max_fields_per_batch = 5)]
 pub struct ClientStore {
     pub session_id: String,
     pub logged_in: bool,
     pub router: RouterState,
     /// Global stats that change whenever any session connects/disconnects or any user acts
     pub global: GlobalStats,
+    /// Flash messages visible regardless of login state (e.g. signup errors)
+    pub messages: Vec<Message>,
 }
 
 /// Per-user data sent only when logged in.
@@ -70,16 +73,40 @@ pub struct ClientStore {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DiffPatch)]
 pub struct UserStore {
     pub user: Option<UserView>,
-    /// Toast messages — replaced wholesale on change
-    pub messages: Vec<Message>,
     /// This user's own todos
     pub todos: Vec<TodoItem>,
 }
 
 /// Full client-visible snapshot = ClientStore + optional UserStore
+/// A logged-in user currently online, visible to everyone
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DiffPatch)]
+pub struct OnlineUser {
+    pub id: String,
+    pub name: String,
+    pub bio: String,
+}
+
+/// A post on the public chat board
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DiffPatch)]
+pub struct ChatPost {
+    pub id: String,
+    pub author_id: String,
+    pub author_name: String,
+    pub text: String,
+}
+
+/// Public data visible to all clients — chat board + online user list
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DiffPatch)]
+pub struct PublicData {
+    pub online_users: Vec<OnlineUser>,
+    pub chat_posts: Vec<ChatPost>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DiffPatch)]
 pub struct FullStore {
     pub base: ClientStore,
+    /// Public board + online users — sent to every connected client
+    pub public_data: PublicData,
     pub user_data: Option<UserStore>,
 }
 
@@ -97,6 +124,8 @@ pub enum Op {
     DeleteTodo { id: String },
     // --- Profile ops ---
     UpdateBio { bio: String },
+    // --- Public board ---
+    PostChat { text: String },
     Ping,
 }
 

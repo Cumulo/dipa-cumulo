@@ -14,8 +14,8 @@ use dashmap::DashMap;
 use dipa::Diffable;
 use futures_util::{SinkExt, StreamExt};
 use shared::{
-    ClientMsg, ClientStore, FullStore, GlobalStats, Message as AppMessage, MessageKind, Op,
-    RouterState, ServerMsg, TodoItem, UserStore, UserView,
+    ChatPost, ClientMsg, ClientStore, FullStore, GlobalStats, Message as AppMessage, MessageKind,
+    OnlineUser, Op, PublicData, RouterState, ServerMsg, TodoItem, UserStore, UserView,
 };
 use tokio::sync::{broadcast, Mutex};
 use tower_http::cors::CorsLayer;
@@ -63,6 +63,8 @@ struct AppDb {
     sessions: HashMap<String, Session>,
     /// All todos across all users, in insertion order
     todos: Vec<TodoItem>,
+    /// Public chat board (capped at 200 posts)
+    chat_posts: Vec<ChatPost>,
 }
 
 type SharedDb = Arc<Mutex<AppDb>>;
@@ -88,6 +90,20 @@ fn twig_container(db: &AppDb, session: &Session) -> FullStore {
         total_users: db.users.len() as u32,
         total_todos: db.todos.len() as u32,
     };
+
+    // Online users list — all sessions that have a logged-in user, sorted by name
+    let mut online_users: Vec<OnlineUser> = db
+        .sessions
+        .values()
+        .filter_map(|s| s.user_id.as_ref().and_then(|uid| db.users.get(uid)))
+        .map(|u| OnlineUser { id: u.id.clone(), name: u.name.clone(), bio: u.bio.clone() })
+        .collect();
+    online_users.sort_by(|a, b| a.name.cmp(&b.name));
+
+    let public_data = PublicData {
+        online_users,
+        chat_posts: db.chat_posts.clone(),
+    };
     let user_data = if logged_in {
         let user = session.user_id.as_ref().and_then(|uid| db.users.get(uid)).map(|u| UserView {
             id: u.id.clone(),
@@ -101,7 +117,6 @@ fn twig_container(db: &AppDb, session: &Session) -> FullStore {
             .unwrap_or_default();
         Some(UserStore {
             user,
-            messages: session.messages.clone(),
             todos,
         })
     } else {
@@ -113,7 +128,9 @@ fn twig_container(db: &AppDb, session: &Session) -> FullStore {
             session_id: session.id.clone(),
             router: session.router.clone(),
             global,
+            messages: session.messages.clone(),
         },
+        public_data,
         user_data,
     }
 }
@@ -203,6 +220,26 @@ fn updater(mut db: AppDb, op: Op, sid: &str, op_id: &str) -> AppDb {
                 }
             }
         }
+        Op::PostChat { text } => {
+            let author = db
+                .sessions
+                .get(sid)
+                .and_then(|s| s.user_id.as_ref())
+                .and_then(|uid| db.users.get(uid))
+                .cloned();
+            if let Some(author) = author {
+                db.chat_posts.push(ChatPost {
+                    id: op_id.to_string(),
+                    author_id: author.id,
+                    author_name: author.name,
+                    text,
+                });
+                // Cap at 200 posts
+                if db.chat_posts.len() > 200 {
+                    db.chat_posts.drain(0..db.chat_posts.len() - 200);
+                }
+            }
+        }
         Op::Ping => {} // handled at ws layer
     }
     db
@@ -255,6 +292,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             let old_store = state_clone.caches.get(&sid_clone).map(|v| v.clone()).unwrap_or_default();
 
             let delta = old_store.create_delta_towards(&new_store);
+            tracing::debug!("diff sid={} did_change={} old_logged_in={} new_logged_in={}", &sid_clone, delta.did_change, old_store.base.logged_in, new_store.base.logged_in);
             if delta.did_change {
                 let patch_bytes = bincode::serialize(&delta.delta).unwrap();
                 let msg = bincode::serialize(&ServerMsg::Patch(patch_bytes)).unwrap();
