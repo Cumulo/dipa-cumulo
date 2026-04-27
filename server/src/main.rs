@@ -13,7 +13,10 @@ use axum::{
 use dashmap::DashMap;
 use dipa::Diffable;
 use futures_util::{SinkExt, StreamExt};
-use shared::{ClientMsg, ClientStore, FullStore, Message as AppMessage, MessageKind, Op, RouterState, ServerMsg, UserStore, UserView};
+use shared::{
+    ClientMsg, ClientStore, FullStore, GlobalStats, Message as AppMessage, MessageKind, Op,
+    RouterState, ServerMsg, TodoItem, UserStore, UserView,
+};
 use tokio::sync::{broadcast, Mutex};
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
@@ -28,6 +31,7 @@ struct User {
     id: String,
     name: String,
     password_md5: String,
+    bio: String,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +61,8 @@ impl Session {
 struct AppDb {
     users: HashMap<String, User>,
     sessions: HashMap<String, Session>,
+    /// All todos across all users, in insertion order
+    todos: Vec<TodoItem>,
 }
 
 type SharedDb = Arc<Mutex<AppDb>>;
@@ -77,14 +83,26 @@ struct AppState {
 
 fn twig_container(db: &AppDb, session: &Session) -> FullStore {
     let logged_in = session.user_id.is_some();
+    let global = GlobalStats {
+        online_count: db.sessions.len() as u32,
+        total_users: db.users.len() as u32,
+        total_todos: db.todos.len() as u32,
+    };
     let user_data = if logged_in {
         let user = session.user_id.as_ref().and_then(|uid| db.users.get(uid)).map(|u| UserView {
             id: u.id.clone(),
             name: u.name.clone(),
+            bio: u.bio.clone(),
         });
+        let todos = session
+            .user_id
+            .as_ref()
+            .map(|uid| db.todos.iter().filter(|t| &t.owner_id == uid).cloned().collect())
+            .unwrap_or_default();
         Some(UserStore {
             user,
             messages: session.messages.clone(),
+            todos,
         })
     } else {
         None
@@ -93,8 +111,8 @@ fn twig_container(db: &AppDb, session: &Session) -> FullStore {
         base: ClientStore {
             logged_in,
             session_id: session.id.clone(),
-            member_count: db.sessions.len() as u32,
             router: session.router.clone(),
+            global,
         },
         user_data,
     }
@@ -117,7 +135,7 @@ fn updater(mut db: AppDb, op: Op, sid: &str, op_id: &str) -> AppDb {
                 let password_md5 = format!("{:x}", md5::compute(password));
                 db.users.insert(
                     op_id.to_string(),
-                    User { id: op_id.to_string(), name: username, password_md5 },
+                    User { id: op_id.to_string(), name: username, password_md5, bio: String::new() },
                 );
                 if let Some(session) = db.sessions.get_mut(sid) {
                     session.user_id = Some(op_id.to_string());
@@ -149,6 +167,40 @@ fn updater(mut db: AppDb, op: Op, sid: &str, op_id: &str) -> AppDb {
         Op::SessionRemoveMessage { id } => {
             if let Some(session) = db.sessions.get_mut(sid) {
                 session.messages.retain(|m| m.id != id);
+            }
+        }
+        Op::AddTodo { text } => {
+            // Clone user_id first to avoid overlapping borrows
+            let user_id = db.sessions.get(sid).and_then(|s| s.user_id.clone());
+            if let Some(uid) = user_id {
+                db.todos.push(TodoItem {
+                    id: op_id.to_string(),
+                    text,
+                    completed: false,
+                    owner_id: uid,
+                });
+            }
+        }
+        Op::ToggleTodo { id } => {
+            let user_id = db.sessions.get(sid).and_then(|s| s.user_id.clone());
+            if let Some(uid) = user_id {
+                if let Some(todo) = db.todos.iter_mut().find(|t| t.id == id && t.owner_id == uid) {
+                    todo.completed = !todo.completed;
+                }
+            }
+        }
+        Op::DeleteTodo { id } => {
+            let user_id = db.sessions.get(sid).and_then(|s| s.user_id.clone());
+            if let Some(uid) = user_id {
+                db.todos.retain(|t| !(t.id == id && t.owner_id == uid));
+            }
+        }
+        Op::UpdateBio { bio } => {
+            let user_id = db.sessions.get(sid).and_then(|s| s.user_id.clone());
+            if let Some(uid) = user_id {
+                if let Some(user) = db.users.get_mut(&uid) {
+                    user.bio = bio;
+                }
             }
         }
         Op::Ping => {} // handled at ws layer
@@ -275,7 +327,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/ws", get(ws_handler))
-        .nest_service("/", ServeDir::new("../client/dist"))
+        .nest_service("/", ServeDir::new("client/dist"))
         .layer(CorsLayer::permissive())
         .with_state(app_state);
 

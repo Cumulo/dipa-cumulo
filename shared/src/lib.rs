@@ -2,16 +2,28 @@
 /// These types use `dipa::DiffPatch` to support efficient delta encoding.
 ///
 /// dipa limitations:
-///   - No HashMap support — we use Vec for messages
+///   - No HashMap support — we use Vec for ordered collections
 ///   - max_fields_per_batch defaults to 4; structs with >4 fields need `#[dipa(max_fields_per_batch = N)]`
 use dipa::DiffPatch;
 use serde::{Deserialize, Serialize};
 
-/// Per-user public data exposed to the client
+/// Global stats visible to every connected client (real-time, server-computed)
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DiffPatch)]
+pub struct GlobalStats {
+    /// Number of WebSocket sessions currently open
+    pub online_count: u32,
+    /// Total registered users
+    pub total_users: u32,
+    /// Total todos across all users
+    pub total_todos: u32,
+}
+
+/// Per-user public profile data
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DiffPatch)]
 pub struct UserView {
     pub id: String,
     pub name: String,
+    pub bio: String,
 }
 
 /// Per-session router state
@@ -33,25 +45,35 @@ pub enum MessageKind {
     Error,
 }
 
-/// What each connected client sees — the "twig" projection.
-///
-/// Fields ≤ 4 so dipa's derive macro is happy with the default batch size.
-/// Messages are a Vec (full replace) to avoid HashMap complexity.
+/// A single todo item owned by one user
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DiffPatch)]
+pub struct TodoItem {
+    pub id: String,
+    pub text: String,
+    pub completed: bool,
+    pub owner_id: String,
+}
+
+/// Base session/global data sent to every client.
+/// Exactly 4 fields — within dipa's default batch size.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DiffPatch)]
 pub struct ClientStore {
     pub session_id: String,
     pub logged_in: bool,
-    pub member_count: u32,
     pub router: RouterState,
+    /// Global stats that change whenever any session connects/disconnects or any user acts
+    pub global: GlobalStats,
 }
 
-/// Additional per-user data, sent only when logged in.
-/// Kept separate to stay within dipa's field limit.
+/// Per-user data sent only when logged in.
+/// Kept separate to stay within dipa's 4-field batch limit.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DiffPatch)]
 pub struct UserStore {
     pub user: Option<UserView>,
-    /// Error / info messages as a list; replaced wholesale on change.
+    /// Toast messages — replaced wholesale on change
     pub messages: Vec<Message>,
+    /// This user's own todos
+    pub todos: Vec<TodoItem>,
 }
 
 /// Full client-visible snapshot = ClientStore + optional UserStore
@@ -61,7 +83,7 @@ pub struct FullStore {
     pub user_data: Option<UserStore>,
 }
 
-/// Operations the client can send to the server (mirrors Calcit `Op` enum)
+/// Operations the client sends to the server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Op {
     UserLogin { username: String, password: String },
@@ -69,6 +91,12 @@ pub enum Op {
     UserLogOut,
     RouterChange { name: String },
     SessionRemoveMessage { id: String },
+    // --- Todo ops ---
+    AddTodo { text: String },
+    ToggleTodo { id: String },
+    DeleteTodo { id: String },
+    // --- Profile ops ---
+    UpdateBio { bio: String },
     Ping,
 }
 

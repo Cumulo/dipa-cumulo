@@ -30,6 +30,8 @@ pub enum ActionOp {
     ServerSnapshot(FullStore),
     /// Server sent a patch — applied externally, triggers re-render via Noop
     TriggerRerender,
+    /// Client-side route change (dipa cannot diff String in nested structs)
+    RouteChange(String),
 }
 
 impl RespoAction for ActionOp {
@@ -52,6 +54,9 @@ impl RespoStore for Store {
             ActionOp::StatesChange(a) => self.update_states(a),
             ActionOp::ServerSnapshot(snapshot) => {
                 self.full_store = snapshot;
+            }
+            ActionOp::RouteChange(name) => {
+                self.full_store.base.router.name = name;
             }
         }
         Ok(())
