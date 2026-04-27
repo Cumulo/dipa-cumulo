@@ -1,0 +1,12 @@
+[workspace]
+members = ["server", "client", "shared"]
+resolver = "2"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+bincode = "1"
+dipa = { version = "0.1", features = ["derive"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
