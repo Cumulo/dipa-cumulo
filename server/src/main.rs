@@ -273,7 +273,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         let snapshot = twig_container(&db, session);
         state.caches.insert(sid.clone(), snapshot.clone());
         let encoded = bincode::serialize(&ServerMsg::Snapshot(Box::new(snapshot))).unwrap();
-        let _ = ws_tx.send(Message::Binary(encoded.into())).await;
+        let _ = ws_tx.send(Message::Binary(encoded)).await;
     }
 
     // Subscribe to broadcast
@@ -296,7 +296,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             if delta.did_change {
                 let patch_bytes = bincode::serialize(&delta.delta).unwrap();
                 let msg = bincode::serialize(&ServerMsg::Patch(patch_bytes)).unwrap();
-                if ws_tx.send(Message::Binary(msg.into())).await.is_err() {
+                if ws_tx.send(Message::Binary(msg)).await.is_err() {
                     break;
                 }
                 state_clone.caches.insert(sid_clone.clone(), new_store);
