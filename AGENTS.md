@@ -119,10 +119,12 @@ EOF
 ## Common Debug Flows
 
 ### Stale WASM cache error (`Invalid size`)
+
 1. `chrome-devtools navigate_page --url http://localhost:5021/ --ignoreCache`
 2. Or open DevTools → Application → Storage → Clear site data
 
 ### Full reset (server + cache)
+
 ```bash
 kill $(pgrep -f './target/debug/server') 2>/dev/null
 cd client && wasm-pack build --target web --out-dir dist/pkg && cd ..
@@ -131,11 +133,13 @@ chrome-devtools navigate_page --url http://localhost:5021/ --ignoreCache
 ```
 
 ### Check for JS errors after interaction
+
 ```bash
 chrome-devtools list_console_messages --types error
 ```
 
 ### Verify login flow
+
 ```bash
 chrome-devtools take_snapshot
 chrome-devtools fill <username_uid> "myuser"
@@ -150,12 +154,12 @@ chrome-devtools list_console_messages --types error
 
 ## File Locations
 
-| File | Purpose |
-|------|---------|
-| `server/src/main.rs` | Axum WS server, twig projection, updater |
-| `shared/src/lib.rs` | Shared types: `Op`, `FullStore`, `ServerMsg`, `ClientMsg` |
-| `client/src/app.rs` | WASM UI (respo components) |
-| `client/src/store.rs` | WASM store + `ActionOp` dispatch |
-| `client/dist/` | Built static files served by server |
-| `client/dist/pkg/` | Compiled WASM + JS bindings |
-| `test_board.js` | CDP automation test (Node.js) |
+| File                  | Purpose                                                   |
+| --------------------- | --------------------------------------------------------- |
+| `server/src/main.rs`  | Axum WS server, twig projection, updater                  |
+| `shared/src/lib.rs`   | Shared types: `Op`, `FullStore`, `ServerMsg`, `ClientMsg` |
+| `client/src/app.rs`   | WASM UI (respo components)                                |
+| `client/src/store.rs` | WASM store + `ActionOp` dispatch                          |
+| `client/dist/`        | Built static files served by server                       |
+| `client/dist/pkg/`    | Compiled WASM + JS bindings                               |
+| `test_board.js`       | CDP automation test (Node.js)                             |
