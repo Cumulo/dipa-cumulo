@@ -212,7 +212,7 @@ fn comp_navigation(
                 .children(vec![
                     span()
                         .style(respo_style().font_weight(CssFontWeight::Weight(700)).font_size(18.0).padding4(0, 16, 0, 0).color(CssColor::Hsl(220, 70, 45)))
-                        .inner_text("Calcium")
+                        .inner_text("Cumulo")
                         .to_node(),
                     nav_tab("Home",    "home",    route == "home" || route.is_empty(), ws.cloned()),
                     nav_tab("Board",   "board",   route == "board",   ws.cloned()),
@@ -263,7 +263,7 @@ fn comp_home(global: &GlobalStats) -> Result<RespoElement<ActionOp>, String> {
         .children(vec![
             div()
                 .style(respo_style().font_size(26.0).font_weight(CssFontWeight::Weight(700)).padding4(0, 0, 8, 0))
-                .children(vec![span().inner_text("Welcome to Calcium").to_node()])
+                .children(vec![span().inner_text("Welcome to Cumulo").to_node()])
                 .to_node(),
             div()
                 .style(respo_style().font_size(14.0).color(CssColor::Hsl(0, 0, 45)).padding4(0, 0, 24, 0))
@@ -766,7 +766,7 @@ fn comp_profile(
             ])
     } else {
         let cursor_edit = cursor.clone();
-        let state_edit = state.clone();
+        let _state_edit = state.clone();
         let bio_for_draft = bio.clone();
 
         div()

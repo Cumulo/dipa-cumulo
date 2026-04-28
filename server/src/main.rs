@@ -272,7 +272,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         let session = db.sessions.get(&sid).unwrap();
         let snapshot = twig_container(&db, session);
         state.caches.insert(sid.clone(), snapshot.clone());
-        let encoded = bincode::serialize(&ServerMsg::Snapshot(snapshot)).unwrap();
+        let encoded = bincode::serialize(&ServerMsg::Snapshot(Box::new(snapshot))).unwrap();
         let _ = ws_tx.send(Message::Binary(encoded.into())).await;
     }
 

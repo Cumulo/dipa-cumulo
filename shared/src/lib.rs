@@ -133,7 +133,7 @@ pub enum Op {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMsg {
     /// Full state snapshot on first connect
-    Snapshot(FullStore),
+    Snapshot(Box<FullStore>),
     /// Delta patch — bincode-encoded `<FullStore as Diffable>::DeltaOwned`
     Patch(Vec<u8>),
     /// Pong reply

@@ -67,6 +67,7 @@ fn connect_ws(store_rc: Rc<RefCell<Store>>) {
 
         match msg {
             ServerMsg::Snapshot(snapshot) => {
+                let snapshot = *snapshot;
                 let mut s = store_msg.borrow_mut();
                 s.full_store = snapshot;
             }

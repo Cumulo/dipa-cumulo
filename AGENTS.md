@@ -1,4 +1,4 @@
-# dipa-calcium — Developer Agents & Debug Commands
+# dipa-cumulo — Developer Agents & Debug Commands
 
 ## Project Stack
 
@@ -44,7 +44,7 @@ RUST_LOG=info cargo run -p server
 # Launch Chrome with remote debugging enabled
 open -a "Google Chrome" --args \
   --remote-debugging-port=9222 \
-  --user-data-dir=/tmp/chrome-debug-calcium \
+  --user-data-dir=/tmp/chrome-debug-cumulo \
   --no-first-run \
   "http://localhost:5021/"
 ```

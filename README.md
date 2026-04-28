@@ -1,4 +1,4 @@
-# dipa-calcium
+# dipa-cumulo
 
 A Rust reimplementation of the [calcium-workflow](https://github.com/Cumulo/calcium-workflow) architecture:
 **server ↔ client** state sync via **diff/patch over WebSocket**, using [`dipa`](https://github.com/chinedufn/dipa) for delta encoding and [`respo.rs`](https://github.com/Respo/respo.rs) for WASM UI rendering.
