@@ -11,7 +11,7 @@ use axum::{
     Router,
 };
 use dashmap::DashMap;
-use dipa::Diffable;
+use cumulo_dipa::Diffable;
 use futures_util::{SinkExt, StreamExt};
 use shared::{
     ChatPost, ClientMsg, ClientStore, FullStore, GlobalStats, Message as AppMessage, MessageKind,

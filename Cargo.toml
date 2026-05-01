@@ -6,7 +6,7 @@ resolver = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 postcard = { version = "1", features = ["use-std"] }
-dipa = { version = "0.1", features = ["derive"], package = "cumulo-dipa" }
+cumulo-dipa = { version = "0.1", features = ["derive"] }
 
 [profile.release]
 opt-level = "z"

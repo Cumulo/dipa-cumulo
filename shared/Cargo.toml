@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 serde = { workspace = true }
-dipa = { workspace = true }
+cumulo-dipa = { workspace = true }

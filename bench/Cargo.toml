@@ -10,7 +10,7 @@ harness = false
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-dipa = { workspace = true }
+cumulo-dipa = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

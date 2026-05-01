@@ -7,7 +7,7 @@
 /// and Calcit recollect (diff-twig / patch-twig).
 use bench::{load_fixture, ChatState};
 use criterion::{criterion_group, criterion_main, Criterion};
-use dipa::{Diffable, Patchable};
+use cumulo_dipa::{Diffable, Patchable};
 use std::hint::black_box;
 
 /// Type alias for the owned delta produced by dipa for ChatState.

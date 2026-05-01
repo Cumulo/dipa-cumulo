@@ -1,10 +1,10 @@
 /// Shared data structures between server and client.
-/// These types use `dipa::DiffPatch` to support efficient delta encoding.
+/// These types use `cumulo_dipa::DiffPatch` to support efficient delta encoding.
 ///
 /// dipa limitations:
 ///   - No HashMap support — we use Vec for ordered collections
 ///   - max_fields_per_batch defaults to 4; structs with >4 fields need `#[dipa(max_fields_per_batch = N)]`
-use dipa::DiffPatch;
+use cumulo_dipa::DiffPatch;
 use serde::{Deserialize, Serialize};
 
 /// Global stats visible to every connected client (real-time, server-computed)

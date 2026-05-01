@@ -1,12 +1,12 @@
 /// Typed structs mirroring the benchmark fixture JSON schema.
-/// Each struct derives dipa::DiffPatch for binary structural diffing,
+/// Each struct derives cumulo_dipa::DiffPatch for binary structural diffing,
 /// matching how dipa-cumulo uses dipa in its server/client sync pipeline.
 ///
 /// Field count notes (dipa default max_fields_per_batch = 4):
 ///   User    7 fields → max_fields_per_batch = 7
 ///   Reply   7 fields → max_fields_per_batch = 7
 ///   Thread 10 fields → max_fields_per_batch = 10
-use dipa::DiffPatch;
+use cumulo_dipa::DiffPatch;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;

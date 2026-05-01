@@ -11,7 +11,7 @@ path = "src/main.rs"
 shared = { path = "../shared" }
 serde = { workspace = true }
 postcard = { workspace = true }
-dipa = { workspace = true }
+cumulo-dipa = { workspace = true }
 
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["ws"] }

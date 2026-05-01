@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::panic;
 use std::rc::Rc;
 
-use dipa::Patchable;
+use cumulo_dipa::Patchable;
 use respo::{util, RespoApp};
 use shared::{ClientMsg, FullStore, Op, ServerMsg};
 use store::Store;
@@ -72,7 +72,7 @@ fn connect_ws(store_rc: Rc<RefCell<Store>>) {
                 s.full_store = snapshot;
             }
             ServerMsg::Patch(patch_bytes) => {
-                type Delta = <FullStore as dipa::Diffable<'static, 'static, FullStore>>::DeltaOwned;
+                type Delta = <FullStore as cumulo_dipa::Diffable<'static, 'static, FullStore>>::DeltaOwned;
                 match postcard::from_bytes::<Delta>(&patch_bytes) {
                     Ok(delta) => {
                         store_msg.borrow_mut().full_store.apply_patch(delta);
