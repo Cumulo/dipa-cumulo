@@ -272,7 +272,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         let session = db.sessions.get(&sid).unwrap();
         let snapshot = twig_container(&db, session);
         state.caches.insert(sid.clone(), snapshot.clone());
-        let encoded = bincode::serialize(&ServerMsg::Snapshot(Box::new(snapshot))).unwrap();
+        let encoded = postcard::to_allocvec(&ServerMsg::Snapshot(Box::new(snapshot))).unwrap();
         let _ = ws_tx.send(Message::Binary(encoded)).await;
     }
 
@@ -294,8 +294,8 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             let delta = old_store.create_delta_towards(&new_store);
             tracing::debug!("diff sid={} did_change={} old_logged_in={} new_logged_in={}", &sid_clone, delta.did_change, old_store.base.logged_in, new_store.base.logged_in);
             if delta.did_change {
-                let patch_bytes = bincode::serialize(&delta.delta).unwrap();
-                let msg = bincode::serialize(&ServerMsg::Patch(patch_bytes)).unwrap();
+                let patch_bytes = postcard::to_allocvec(&delta.delta).unwrap();
+                let msg = postcard::to_allocvec(&ServerMsg::Patch(patch_bytes)).unwrap();
                 if ws_tx.send(Message::Binary(msg)).await.is_err() {
                     break;
                 }
@@ -311,7 +311,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         while let Some(Ok(msg)) = ws_rx.next().await {
             match msg {
                 Message::Binary(data) => {
-                    let Ok(client_msg) = bincode::deserialize::<ClientMsg>(&data) else { continue };
+                    let Ok(client_msg) = postcard::from_bytes::<ClientMsg>(&data) else { continue };
                     match client_msg {
                         ClientMsg::Ping => {
                             // pong is handled by send path via broadcast, nothing needed

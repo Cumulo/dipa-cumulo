@@ -1,12 +1,21 @@
 [workspace]
-members = ["server", "client", "shared"]
+members = ["server", "client", "shared", "bench"]
 resolver = "2"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
-bincode = "1"
-dipa = { version = "0.1", features = ["derive"] }
+serde_json = "1"
+postcard = { version = "1", features = ["use-std"] }
+dipa = { version = "0.1", features = ["derive"], package = "cumulo-dipa" }
 
 [profile.release]
 opt-level = "z"
 lto = true
+
+[profile.bench]
+opt-level = 3
+debug = false
+
+[patch.crates-io]
+cumulo-dipa = { path = "../dipa" }
+cumulo-dipa-derive = { path = "../dipa/crates/dipa-derive" }

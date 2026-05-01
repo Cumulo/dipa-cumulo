@@ -17,7 +17,7 @@ use web_sys::{BinaryType, MessageEvent, WebSocket};
 pub fn dispatch_op(store: &Store, op: Op) {
     if let Some(ws) = &store.ws {
         let msg = ClientMsg::Op(op);
-        if let Ok(bytes) = bincode::serialize(&msg) {
+        if let Ok(bytes) = postcard::to_allocvec(&msg) {
             let array = js_sys::Uint8Array::from(bytes.as_slice());
             let _ = ws.send_with_array_buffer_view(&array);
         }
@@ -57,7 +57,7 @@ fn connect_ws(store_rc: Rc<RefCell<Store>>) {
             Err(_) => return,
         };
         let bytes = js_sys::Uint8Array::new(&buf).to_vec();
-        let msg: ServerMsg = match bincode::deserialize(&bytes) {
+        let msg: ServerMsg = match postcard::from_bytes(&bytes) {
             Ok(m) => m,
             Err(e) => {
                 util::error_log!("deserialize server msg: {e}");
@@ -73,7 +73,7 @@ fn connect_ws(store_rc: Rc<RefCell<Store>>) {
             }
             ServerMsg::Patch(patch_bytes) => {
                 type Delta = <FullStore as dipa::Diffable<'static, 'static, FullStore>>::DeltaOwned;
-                match bincode::deserialize::<Delta>(&patch_bytes) {
+                match postcard::from_bytes::<Delta>(&patch_bytes) {
                     Ok(delta) => {
                         store_msg.borrow_mut().full_store.apply_patch(delta);
                     }
