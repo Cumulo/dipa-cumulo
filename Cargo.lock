@@ -394,7 +394,9 @@ dependencies = [
 
 [[package]]
 name = "cumulo-dipa"
-version = "0.1.1"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99a125e507ced87f595a815a1cebfcff1d219559c12794e4b2c35875889105b6"
 dependencies = [
  "cumulo-dipa-derive",
  "serde",
@@ -402,7 +404,9 @@ dependencies = [
 
 [[package]]
 name = "cumulo-dipa-derive"
-version = "0.1.0"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e807e11c07580321f4a2f60ce3ede97b225aad48674daf7bf08b56523d705d9"
 dependencies = [
  "proc-macro2",
  "quote",
